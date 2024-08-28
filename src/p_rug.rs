@@ -24,6 +24,13 @@ impl EncryptionKey {
         }
     }
 
+    pub fn n(&self) -> &Integer {
+        &self.n
+    }
+    pub fn half_n(&self) -> &Integer {
+        &self.half_n
+    }
+
     fn l(&self, x: &Integer) -> Option<Integer> {
         if (x % &self.n).complete() != *Integer::ONE {
             return None;
@@ -140,14 +147,14 @@ impl DecryptionKey {
     pub fn from_primes(p: Integer, q: Integer) -> Result<Self, Error> {
         // Paillier doesn't work if p == q
         if p == q {
-            return Err(Error::InvalidPQ.into());
+            return Err(Error::InvalidPQ);
         }
         let pm1 = Integer::from(&p - 1);
         let qm1 = Integer::from(&q - 1);
         let ek = EncryptionKey::from_n((&p * &q).complete());
         let lambda = pm1.clone().lcm(&qm1);
         if lambda.cmp0().is_eq() {
-            return Err(Error::InvalidPQ.into());
+            return Err(Error::InvalidPQ);
         }
 
         // u = lambda^-1 mod N
@@ -164,6 +171,10 @@ impl DecryptionKey {
             exp_n,
             exp_lambda,
         })
+    }
+
+    pub fn encryption_key(&self) -> &EncryptionKey {
+        &self.ek
     }
 
     /// Decrypts the ciphertext, returns plaintext in `{-N/2, .., N_2}`
@@ -229,7 +240,7 @@ impl DecryptionKey {
         }
 
         let e = self.crt_mod_nn.prepare_exponent(scalar);
-        Ok(self.crt_mod_nn.exp(ciphertext, &e).ok_or(Error::Ops)?)
+        self.crt_mod_nn.exp(ciphertext, &e).ok_or(Error::Ops)
     }
 }
 
@@ -405,7 +416,7 @@ pub fn sieve_generate_safe_primes(rng: &mut impl rand_core::RngCore, bits: u32, 
 
 /// Wraps any randomness source that implements [`rand_core::RngCore`] and makes
 /// it compatible with [`rug::rand`].
-pub fn external_rand<'a>(rng: &'a mut impl rand_core::RngCore) -> rug::rand::ThreadRandState<'a> {
+pub fn external_rand(rng: &mut impl rand_core::RngCore) -> rug::rand::ThreadRandState<'_> {
     // This is a giant downside of rug, that it can't work with rand_core and
     // that this impl has to byte muck
 
