@@ -11,7 +11,7 @@ bytemuck = { version = "1.17.1", features = ["derive"] }
 # awint = "0.17.0"
 # bnum = { version = "0.11", features = ["rand"] }
 crypto-bigint = "0.5.5"
-dashu = "0.4.2"
+dashu = { version = "0.4.2", features = ["rand"] }
 ibig = "0.3.6"
 malachite = "0.4.15"
 num-bigint = "0.4.6"

@@ -1,61 +1,34 @@
-use every_bignum::{p_rug, p_ibig};
-use every_bignum::two_primes::{P, Q};
-
-fn rug_dk() -> p_rug::DecryptionKey {
-    let p = rug::Integer::from_str_radix(P, 16).unwrap();
-    let q = rug::Integer::from_str_radix(Q, 16).unwrap();
-    p_rug::DecryptionKey::from_primes(p, q).unwrap()
-}
-
-fn ibig_dk() -> p_ibig::DecryptionKey {
-    let p = ibig::IBig::from_str_radix(P, 16).unwrap();
-    let q = ibig::IBig::from_str_radix(Q, 16).unwrap();
-    p_ibig::DecryptionKey::from_primes(p, q).unwrap()
-}
+use every_bignum::{p_dashu, p_ibig, p_rug};
 
 fn encrypt(c: &mut criterion::Criterion) {
     let base_rng = rand_dev::DevRng::new();
 
     let mut group = c.benchmark_group("encrypt");
 
-    // ------ rug ------ //
+    macro_rules! make {
+        ($name:literal, $module:ident) => {
+            let mut rng = base_rng.clone();
+            let dk = $module::a_dk();
+            let ek = dk.encryption_key();
+            let mut generate_inputs = || {
+                let x = $module::random_below(ek.n().clone(), &mut rng) - ek.half_n();
+                let nonce = $module::sample_in_mult_group(&mut rng, ek.n());
+                (x, nonce)
+            };
 
-    let mut rng = base_rng.clone();
-    let dk = rug_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let x = ek.n().clone().random_below(&mut p_rug::external_rand(&mut rng))
-            - ek.half_n();
-        let nonce = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        (x, nonce)
-    };
+            group.bench_function($name, |b| {
+                b.iter_batched(
+                    &mut generate_inputs,
+                    |(x, nonce)| ek.encrypt_with(&x, &nonce).unwrap(),
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+        };
+    }
 
-    group.bench_function("rug", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(x, nonce)| ek.encrypt_with(&x, &nonce).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
-
-    // ------ ibig ------ //
-
-    let mut rng = base_rng.clone();
-    let dk = ibig_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let x = p_ibig::random_below(ek.n().clone(), &mut rng) - ek.half_n();
-        let nonce = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        (x, nonce)
-    };
-
-    group.bench_function("ibig", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(x, nonce)| ek.encrypt_with(&x, &nonce).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
+    make!("rug", p_rug);
+    make!("ibig", p_ibig);
+    make!("dashu", p_dashu);
 }
 
 fn encrypt_with_factorization(c: &mut criterion::Criterion) {
@@ -65,42 +38,30 @@ fn encrypt_with_factorization(c: &mut criterion::Criterion) {
 
     // ------ rug ------ //
 
-    let mut rng = base_rng.clone();
-    let dk = rug_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let x = ek.n().clone().random_below(&mut p_rug::external_rand(&mut rng))
-            - ek.half_n();
-        let nonce = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        (x, nonce)
-    };
+    macro_rules! make {
+        ($name:literal, $module:ident) => {
+            let mut rng = base_rng.clone();
+            let dk = $module::a_dk();
+            let ek = dk.encryption_key();
+            let mut generate_inputs = || {
+                let x = $module::random_below(ek.n().clone(), &mut rng) - ek.half_n();
+                let nonce = $module::sample_in_mult_group(&mut rng, ek.n());
+                (x, nonce)
+            };
 
-    group.bench_function("rug", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(x, nonce)| dk.encrypt_with(&x, &nonce).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
+            group.bench_function($name, |b| {
+                b.iter_batched(
+                    &mut generate_inputs,
+                    |(x, nonce)| dk.encrypt_with(&x, &nonce).unwrap(),
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+        };
+    }
 
-    // ------ ibig ------ //
-
-    let mut rng = base_rng.clone();
-    let dk = ibig_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let x = p_ibig::random_below(ek.n().clone(), &mut rng) - ek.half_n();
-        let nonce = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        (x, nonce)
-    };
-
-    group.bench_function("ibig", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(x, nonce)| dk.encrypt_with(&x, &nonce).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
+    make!("rug", p_rug);
+    make!("ibig", p_ibig);
+    make!("dashu", p_dashu);
 }
 
 fn decrypt(c: &mut criterion::Criterion) {
@@ -108,46 +69,30 @@ fn decrypt(c: &mut criterion::Criterion) {
 
     let mut group = c.benchmark_group("decrypt");
 
-    // ------ rug ------ //
+    macro_rules! make {
+        ($name:literal, $module:ident) => {
+            let mut rng = base_rng.clone();
+            let dk = $module::a_dk();
+            let ek = dk.encryption_key();
+            let mut generate_inputs = || {
+                let x = $module::random_below(ek.n().clone(), &mut rng) - ek.half_n();
+                let nonce = $module::sample_in_mult_group(&mut rng, ek.n());
+                let c = dk.encrypt_with(&x, &nonce).unwrap();
+                c
+            };
 
-    let mut rng = base_rng.clone();
-    let dk = rug_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let x = ek.n().clone().random_below(&mut p_rug::external_rand(&mut rng))
-            - ek.half_n();
-        let nonce = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        let c = dk.encrypt_with(&x, &nonce).unwrap();
-        c
-    };
-
-    group.bench_function("rug", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |c| dk.decrypt(&c).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
-
-    // ------ ibig ------ //
-
-    let mut rng = base_rng.clone();
-    let dk = ibig_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let x = p_ibig::random_below(ek.n().clone(), &mut rng) - ek.half_n();
-        let nonce = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        let c = dk.encrypt_with(&x, &nonce).unwrap();
-        c
-    };
-
-    group.bench_function("ibig", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |c| dk.decrypt(&c).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
+            group.bench_function($name, |b| {
+                b.iter_batched(
+                    &mut generate_inputs,
+                    |c| dk.decrypt(&c).unwrap(),
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+        };
+    }
+    make!("rug", p_rug);
+    make!("ibig", p_ibig);
+    make!("dashu", p_dashu);
 }
 
 fn omul(c: &mut criterion::Criterion) {
@@ -155,48 +100,31 @@ fn omul(c: &mut criterion::Criterion) {
 
     let mut group = c.benchmark_group("omul");
 
-    // ------ rug ------ //
+    macro_rules! make {
+        ($name:literal, $module:ident) => {
+            let mut rng = base_rng.clone();
+            let dk = $module::a_dk();
+            let ek = dk.encryption_key();
+            let mut generate_inputs = || {
+                let k = $module::sample_in_mult_group(&mut rng, ek.n());
+                let x = $module::random_below(ek.n().clone(), &mut rng) - ek.half_n();
+                let nonce = $module::sample_in_mult_group(&mut rng, ek.n());
+                let c = dk.encrypt_with(&x, &nonce).unwrap();
+                (c, k)
+            };
 
-    let mut rng = base_rng.clone();
-    let dk = rug_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let k = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        let x = ek.n().clone().random_below(&mut p_rug::external_rand(&mut rng))
-            - ek.half_n();
-        let nonce = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        let c = dk.encrypt_with(&x, &nonce).unwrap();
-        (c, k)
-    };
-
-    group.bench_function("rug", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(c, k)| ek.omul(&k, &c).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
-
-    // ------ ibig ------ //
-
-    let mut rng = base_rng.clone();
-    let dk = ibig_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let k = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        let x = p_ibig::random_below(ek.n().clone(), &mut rng) - ek.half_n();
-        let nonce = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        let c = dk.encrypt_with(&x, &nonce).unwrap();
-        (c, k)
-    };
-
-    group.bench_function("ibig", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(c, k)| ek.omul(&k, &c).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
+            group.bench_function($name, |b| {
+                b.iter_batched(
+                    &mut generate_inputs,
+                    |(c, k)| ek.omul(&k, &c).unwrap(),
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+        };
+    }
+    make!("rug", p_rug);
+    make!("ibig", p_ibig);
+    make!("dashu", p_dashu);
 }
 
 fn omul_with_factorization(c: &mut criterion::Criterion) {
@@ -204,48 +132,31 @@ fn omul_with_factorization(c: &mut criterion::Criterion) {
 
     let mut group = c.benchmark_group("omul with factorization");
 
-    // ------ rug ------ //
+    macro_rules! make {
+        ($name:literal, $module:ident) => {
+            let mut rng = base_rng.clone();
+            let dk = $module::a_dk();
+            let ek = dk.encryption_key();
+            let mut generate_inputs = || {
+                let k = $module::sample_in_mult_group(&mut rng, ek.n());
+                let x = $module::random_below(ek.n().clone(), &mut rng) - ek.half_n();
+                let nonce = $module::sample_in_mult_group(&mut rng, ek.n());
+                let c = dk.encrypt_with(&x, &nonce).unwrap();
+                (c, k)
+            };
 
-    let mut rng = base_rng.clone();
-    let dk = rug_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let k = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        let x = ek.n().clone().random_below(&mut p_rug::external_rand(&mut rng))
-            - ek.half_n();
-        let nonce = p_rug::sample_in_mult_group(&mut rng, ek.n());
-        let c = dk.encrypt_with(&x, &nonce).unwrap();
-        (c, k)
-    };
-
-    group.bench_function("rug", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(c, k)| dk.omul(&k, &c).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
-
-    // ------ ibig ------ //
-
-    let mut rng = base_rng.clone();
-    let dk = ibig_dk();
-    let ek = dk.encryption_key();
-    let mut generate_inputs = || {
-        let k = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        let x = p_ibig::random_below(ek.n().clone(), &mut rng) - ek.half_n();
-        let nonce = p_ibig::sample_in_mult_group(&mut rng, ek.n());
-        let c = dk.encrypt_with(&x, &nonce).unwrap();
-        (c, k)
-    };
-
-    group.bench_function("ibig", |b| {
-        b.iter_batched(
-            &mut generate_inputs,
-            |(c, k)| dk.omul(&k, &c).unwrap(),
-            criterion::BatchSize::SmallInput,
-        )
-    });
+            group.bench_function($name, |b| {
+                b.iter_batched(
+                    &mut generate_inputs,
+                    |(c, k)| dk.omul(&k, &c).unwrap(),
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+        };
+    }
+    make!("rug", p_rug);
+    make!("ibig", p_ibig);
+    make!("dashu", p_dashu);
 }
 
 fn safe_prime(c: &mut criterion::Criterion) {
@@ -268,6 +179,6 @@ criterion::criterion_group!(
     decrypt,
     omul,
     omul_with_factorization,
-    safe_prime,
+    //safe_prime,
 );
 criterion::criterion_main!(benches);

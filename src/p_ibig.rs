@@ -458,6 +458,12 @@ pub fn sample_in_mult_group(rng: &mut impl rand_core::RngCore, n: &IBig) -> IBig
     }
 }
 
+pub fn a_dk() -> DecryptionKey {
+    let p = IBig::from_str_radix(crate::two_primes::P, 16).unwrap();
+    let q = IBig::from_str_radix(crate::two_primes::Q, 16).unwrap();
+    DecryptionKey::from_primes(p, q).unwrap()
+}
+
 #[cfg(test)]
 mod test {
     use ibig::IBig;

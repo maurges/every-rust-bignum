@@ -1,7 +1,8 @@
+pub mod p_dashu;
+pub mod p_ibig;
+pub mod p_rug;
 mod small_primes;
 pub mod two_primes;
-pub mod p_rug;
-pub mod p_ibig;
 
 pub fn main() {
     println!("Hello, world!");
