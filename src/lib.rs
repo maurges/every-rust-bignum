@@ -1,5 +1,7 @@
 mod small_primes;
+pub mod two_primes;
 pub mod p_rug;
+pub mod p_ibig;
 
 pub fn main() {
     println!("Hello, world!");
@@ -12,7 +14,7 @@ pub enum Error {
     /// encryption error
     Encrypt,
     /// decryption error
-    Decrypt,
+    Decrypt(&'static str),
     /// homomorphic operation failed: invalid inputs
     Ops,
     /// could not precompute data for faster exponentiation
