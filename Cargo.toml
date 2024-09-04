@@ -13,7 +13,7 @@ bytemuck = { version = "1.17.1", features = ["derive"] }
 crypto-bigint = "0.5.5"
 dashu = { version = "0.4.2", features = ["rand"] }
 ibig = "0.3.6"
-malachite = "0.4.15"
+malachite = { version = "0.4.15", features = ["random"] }
 num-bigint = "0.4.6"
 rug = "1.25.0"
 

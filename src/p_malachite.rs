@@ -1,22 +1,22 @@
-use ibig::{modular::ModuloRing, ops::UnsignedAbs as _, IBig};
-use num_traits::{One as _, Zero as _};
+// I hate this api. I'm not using it.
+use malachite::{integer::Integer, num::{arithmetic::traits::{ModAssign, ModInverse, ModPow, UnsignedAbs}, basic::traits::{One as _, Zero as _}, conversion::traits::FromStringBase as _}, Natural};
 
 use crate::Error;
 
-pub type Plaintext = IBig;
-pub type Ciphertext = IBig;
-pub type Nonce = IBig;
+pub type Plaintext = Integer;
+pub type Ciphertext = Integer;
+pub type Nonce = Integer;
 
 #[derive(Clone)]
 pub struct EncryptionKey {
-    n: IBig,
-    nn: IBig,
-    half_n: IBig,
-    neg_half_n: IBig,
+    n: Integer,
+    nn: Integer,
+    half_n: Integer,
+    neg_half_n: Integer,
 }
 
 impl EncryptionKey {
-    pub fn from_n(n: IBig) -> Self {
+    pub fn from_n(n: Integer) -> Self {
         let nn = n.clone() * &n;
         let half_n = n.clone() >> 1usize;
         let neg_half_n = -half_n.clone();
@@ -28,15 +28,15 @@ impl EncryptionKey {
         }
     }
 
-    pub fn n(&self) -> &IBig {
+    pub fn n(&self) -> &Integer {
         &self.n
     }
-    pub fn half_n(&self) -> &IBig {
+    pub fn half_n(&self) -> &Integer {
         &self.half_n
     }
 
-    fn l(&self, x: &IBig) -> Option<IBig> {
-        if x % &self.n != IBig::one() {
+    fn l(&self, x: &Integer) -> Option<Integer> {
+        if x % &self.n != Integer::ONE {
             return None;
         }
         if !in_mult_group(x, &self.nn) {
@@ -44,34 +44,35 @@ impl EncryptionKey {
         }
 
         // (x - 1) / N
-        Some((x - IBig::one()) / &self.n)
+        Some((x - Integer::ONE) / &self.n)
     }
 
     /// Checks whether `x` is `{-N/2, .., N/2}`
-    pub fn in_signed_group(&self, x: &IBig) -> bool {
+    pub fn in_signed_group(&self, x: &Integer) -> bool {
         self.neg_half_n <= *x && *x <= self.half_n
     }
 
     /// Encrypts the plaintext `x` in `{-N/2, .., N_2}` with `nonce` in `Z*_n`
     ///
     /// Returns error if inputs are not in specified range
-    pub fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<IBig, Error> {
+    pub fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Integer, Error> {
         if !self.in_signed_group(x) || !in_mult_group(nonce, &self.n) {
             return Err(Error::Encrypt);
         }
 
-        let x = if x >= &IBig::zero() {
+        let x = if x >= &Integer::ZERO {
             x.clone()
         } else {
             x + &self.n
         };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
-        let a = (IBig::one() + (&x * &self.n)) % &self.nn;
+        let a = (Integer::ONE + (&x * &self.n)) % &self.nn;
         // b = nonce^N mod N^2
-        let b = pow_mod(nonce, &self.n, self.nn.clone());
+        let b =
+            pow_mod(nonce.clone(), self.n.clone(), self.nn.clone()).ok_or(Error::PowModUndef)?;
 
-        let c = modulo(&(a * IBig::from(b)), &self.nn);
+        let c = modulo(&(a * Integer::from(b)), &self.nn);
         Ok(c)
     }
 
@@ -95,17 +96,17 @@ impl EncryptionKey {
     }
 
     /// Homomorphic multiplication of scalar at ciphertext
-    pub fn omul(&self, scalar: &IBig, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
+    pub fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         if !in_mult_group_abs(scalar, &self.n) || !in_mult_group(ciphertext, &self.nn) {
             Err(Error::Ops)
         } else {
-            Ok(pow_mod(ciphertext, scalar, self.nn.clone()))
+            pow_mod(ciphertext.clone(), scalar.clone(), self.nn.clone()).ok_or(Error::Ops)
         }
     }
 
     /// Homomorphic negation of a ciphertext
     pub fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
-        invert(ciphertext, self.nn.clone())
+        invert(ciphertext.clone(), self.nn.clone())
             .ok_or(Error::Ops)
             .map(Into::into)
     }
@@ -116,7 +117,7 @@ impl EncryptionKey {
 pub struct DecryptionKey {
     ek: EncryptionKey,
     /// `lambda^-1 mod N`
-    mu: IBig,
+    mu: Integer,
 
     crt_mod_nn: CrtExp,
     /// Calculates `x ^ N mod N^2`. It's used for faster encryption
@@ -145,21 +146,21 @@ impl DecryptionKey {
     ///
     /// Returns error if `p` and `q` do not correspond to a valid paillier key.
     #[allow(clippy::many_single_char_names)]
-    pub fn from_primes(p: IBig, q: IBig) -> Result<Self, Error> {
+    pub fn from_primes(p: Integer, q: Integer) -> Result<Self, Error> {
         // Paillier doesn't work if p == q
         if p == q {
             return Err(Error::InvalidPQ);
         }
-        let pm1 = IBig::from(&p - 1);
-        let qm1 = IBig::from(&q - 1);
+        let pm1 = &p - Integer::ONE;
+        let qm1 = &q - Integer::ONE;
         let ek = EncryptionKey::from_n(&p * &q);
         let lambda = lcm(&pm1, &qm1);
-        if lambda == IBig::zero() {
+        if lambda == Integer::ZERO {
             return Err(Error::InvalidPQ);
         }
 
         // u = lambda^-1 mod N
-        let u = invert(&lambda, ek.n.clone())
+        let u = invert(lambda.clone(), ek.n.clone())
             .ok_or(Error::InvalidPQ)?
             .into();
 
@@ -198,7 +199,7 @@ impl DecryptionKey {
         // m = lu = L(a)*u = L(c^\lamba*)u mod n
         let plaintext = (l * &self.mu) % &self.ek.n;
 
-        if IBig::from(&plaintext << 1) >= self.ek.n {
+        if Integer::from(&plaintext << 1) >= self.ek.n {
             Ok(plaintext - &self.ek.n)
         } else {
             Ok(plaintext)
@@ -215,14 +216,14 @@ impl DecryptionKey {
             return Err(Error::Encrypt);
         }
 
-        let x = if x >= &IBig::zero() {
+        let x = if x >= &Integer::ZERO {
             x.clone()
         } else {
             x + &self.ek.n
         };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
-        let a = (IBig::one() + x * &self.ek.n) % &self.ek.nn;
+        let a = (Integer::ONE + x * &self.ek.n) % &self.ek.nn;
         // b = nonce^N mod N^2
         let b = self
             .crt_mod_nn
@@ -235,7 +236,7 @@ impl DecryptionKey {
     /// Homomorphic multiplication of scalar at ciphertext
     ///
     /// It uses the fact that factorization of `N` is known to speed up an operation.
-    pub fn omul(&self, scalar: &IBig, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
+    pub fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         if !in_mult_group_abs(scalar, &self.ek.n) || !in_mult_group(ciphertext, &self.ek.nn) {
             return Err(Error::Ops);
         }
@@ -247,14 +248,15 @@ impl DecryptionKey {
 
 /// Checks that `x` is in Z*_n
 #[inline(always)]
-pub fn in_mult_group(x: &IBig, n: &IBig) -> bool {
-    x >= &IBig::zero() && in_mult_group_abs(x, n)
+pub fn in_mult_group(x: &Integer, n: &Integer) -> bool {
+    x >= &Integer::ZERO && in_mult_group_abs(x, n)
 }
 
 /// Checks that `abs(x)` is in Z*_n
 #[inline(always)]
-pub fn in_mult_group_abs(x: &IBig, n: &IBig) -> bool {
-    x.gcd(n) == IBig::one()
+pub fn in_mult_group_abs(x: &Integer, n: &Integer) -> bool {
+    malachite::num::arithmetic::traits::ExtendedGcd::extended_gcd(x, n)
+        .0 == Natural::ONE
 }
 
 /// Faster algorithm for modular exponentiation based on Chinese remainder theorem when modulo factorization is known
@@ -264,19 +266,19 @@ pub fn in_mult_group_abs(x: &IBig, n: &IBig) -> bool {
 /// [exponentiation algorithm](Self::exp).
 #[derive(Clone)]
 pub struct CrtExp {
-    n: IBig,
-    n1: IBig,
-    phi_n1: IBig,
-    n2: IBig,
-    phi_n2: IBig,
-    beta: IBig,
+    n: Integer,
+    n1: Integer,
+    phi_n1: Integer,
+    n2: Integer,
+    phi_n2: Integer,
+    beta: Integer,
 }
 
 /// Exponent for [modular exponentiation](CrtExp::exp) via [`CrtExp`]
 #[derive(Clone)]
 pub struct Exponent {
-    e_mod_phi_pp: IBig,
-    e_mod_phi_qq: IBig,
+    e_mod_phi_pp: Integer,
+    e_mod_phi_qq: Integer,
     is_negative: bool,
 }
 
@@ -288,18 +290,18 @@ impl CrtExp {
     ///
     /// [`CrtExp::build_n`] and [`CrtExp::build_nn`] can be used when `n1` and `n2` are primes or
     /// square of primes.
-    pub fn build(n1: IBig, phi_n1: IBig, n2: IBig, phi_n2: IBig) -> Option<Self> {
-        if n1 <= IBig::zero()
-            || n2 <= IBig::zero()
-            || phi_n1 <= IBig::zero()
-            || phi_n2 <= IBig::zero()
+    pub fn build(n1: Integer, phi_n1: Integer, n2: Integer, phi_n2: Integer) -> Option<Self> {
+        if n1 <= Integer::ZERO
+            || n2 <= Integer::ZERO
+            || phi_n1 <= Integer::ZERO
+            || phi_n2 <= Integer::ZERO
             || phi_n1 >= n1
             || phi_n2 >= n2
         {
             return None;
         }
 
-        let beta = invert(&n1, n2.clone())?;
+        let beta = invert(n1.clone(), n2.clone())?;
         Some(Self {
             n: &n1 * &n2,
             n1,
@@ -311,14 +313,14 @@ impl CrtExp {
     }
 
     /// Builds a `CrtExp` for exponentiation modulo `n = p * q` where `p`, `q` are primes
-    pub fn build_n(p: &IBig, q: &IBig) -> Option<Self> {
-        let phi_p = p - 1u8;
-        let phi_q = q - 1u8;
+    pub fn build_n(p: &Integer, q: &Integer) -> Option<Self> {
+        let phi_p = p - Integer::ONE;
+        let phi_q = q - Integer::ONE;
         Self::build(p.clone(), phi_p, q.clone(), phi_q)
     }
 
     /// Builds a `CrtExp` for exponentiation modulo `nn = (p * q)^2` where `p`, `q` are primes
-    pub fn build_nn(p: &IBig, q: &IBig) -> Option<Self> {
+    pub fn build_nn(p: &Integer, q: &Integer) -> Option<Self> {
         let pp = p * p;
         let qq = q * q;
         let phi_pp = &pp - p;
@@ -327,9 +329,9 @@ impl CrtExp {
     }
 
     /// Prepares exponent to perform [modular exponentiation](Self::exp)
-    pub fn prepare_exponent(&self, e: &IBig) -> Exponent {
+    pub fn prepare_exponent(&self, e: &Integer) -> Exponent {
         let neg_e = -e;
-        let is_negative = e <= &IBig::zero();
+        let is_negative = e <= &Integer::ZERO;
         let e = if is_negative { &neg_e } else { e };
         let e_mod_phi_pp = e % &self.phi_n1;
         let e_mod_phi_qq = e % &self.phi_n2;
@@ -343,66 +345,79 @@ impl CrtExp {
     /// Performs exponentiation modulo `n`
     ///
     /// Exponent needs to be output of [`CrtExp::prepare_exponent`]
-    pub fn exp(&self, x: &IBig, e: &Exponent) -> Option<IBig> {
+    pub fn exp(&self, x: &Integer, e: &Exponent) -> Option<Integer> {
         let s1 = modulo(x, &self.n1);
         let s2 = modulo(x, &self.n2);
 
         // `e_mod_phi_pp` and `e_mod_phi_qq` are guaranteed to be non-negative by construction
-        let r1 = pow_mod(&s1, &e.e_mod_phi_pp, self.n1.clone());
-        let r2 = pow_mod(&s2, &e.e_mod_phi_qq, self.n2.clone());
+        #[allow(clippy::expect_used)]
+        let r1 = pow_mod(s1, e.e_mod_phi_pp.clone(), self.n1.clone())
+            .expect("exponent is guaranteed to be non-negative");
+        #[allow(clippy::expect_used)]
+        let r2 = pow_mod(s2, e.e_mod_phi_qq.clone(), self.n2.clone())
+            .expect("exponent is guaranteed to be non-negative");
 
         let result = modulo(&((r2 - &r1) * &self.beta), &self.n2) * &self.n1 + &r1;
 
         if e.is_negative {
-            invert(&result, self.n.clone())
+            invert(result, self.n.clone())
         } else {
             Some(result)
         }
     }
 }
 
-fn pow_mod(x: &IBig, e: &IBig, m: IBig) -> IBig {
-    let ring = ModuloRing::new(&m.unsigned_abs());
-    let x = ring.from(x);
-    // this panics!
-    x.pow_signed(e).residue().into()
+fn pow_mod(mut x: Integer, e: Integer, m: Integer) -> Option<Integer> {
+    x.mod_assign(&m);
+    let x = x.unsigned_abs();
+    let m = m.unsigned_abs();
+    if e >= Integer::ZERO {
+        let e = e.unsigned_abs();
+        Some(x.mod_pow(e, m).into())
+    } else {
+        let e = e.unsigned_abs();
+        let x = x.mod_inverse(&m)?;
+        Some(x.mod_pow(e, m).into())
+    }
 }
 
-fn invert(x: &IBig, m: IBig) -> Option<IBig> {
-    let ring = ModuloRing::new(&m.unsigned_abs());
-    let x = ring.from(x);
-    x.inverse().map(|r| r.residue().into())
+fn invert(mut x: Integer, m: Integer) -> Option<Integer> {
+    x.mod_assign(&m);
+    let x = x.unsigned_abs();
+    let m = m.unsigned_abs();
+    x.mod_inverse(&m).map(Into::into)
 }
 
-fn lcm(a: &IBig, b: &IBig) -> IBig {
-    let gcd = a.gcd(b);
+fn lcm(a: &Integer, b: &Integer) -> Integer {
+    let gcd: Integer = malachite::num::arithmetic::traits::ExtendedGcd::extended_gcd(a, b).0.into();
     a * b / gcd
 }
 
 /// Result is always positive
-fn modulo(x: &IBig, m: &IBig) -> IBig {
-    x % m
-    /*
-    if x < &IBig::zero() {
+fn modulo(x: &Integer, m: &Integer) -> Integer {
+    if x < &Integer::ZERO {
         m + x % m
     } else {
         x % m
     }
-    */
 }
 
-pub fn random_bits(bits: usize, rng: &mut impl rand_core::RngCore) -> ibig::UBig {
-    let max = (ibig::UBig::one() << bits) - 1;
-    rand::Rng::gen_range(rng, ibig::UBig::zero()..max)
+pub fn random_bits(bits: usize, rng: &mut impl rand_core::RngCore) -> Natural {
+    let ubig = crate::p_dashu::random_bits(bits, rng);
+    let digits = ubig.to_string();
+    <Natural as std::str::FromStr>::from_str(&digits).unwrap()
 }
 
-pub fn random_below(num: IBig, rng: &mut impl rand_core::RngCore) -> IBig {
-    rand::Rng::gen_range(rng, IBig::zero()..num)
+pub fn random_below(num: Integer, rng: &mut impl rand_core::RngCore) -> Integer {
+    let num = dashu::integer::IBig::from_str_radix(&num.to_string(), 10).unwrap();
+    let ibig = crate::p_dashu::random_below(num, rng);
+    let digits = ibig.to_string();
+    <Integer as std::str::FromStr>::from_str(&digits).unwrap()
 }
 
 /*
 /// Generates a random safe prime
-pub fn generate_safe_prime(rng: &mut impl rand_core::RngCore, bits: usize) -> IBig {
+pub fn generate_safe_prime(rng: &mut impl rand_core::RngCore, bits: usize) -> Integer {
     sieve_generate_safe_primes(rng, bits, 135)
 }
 
@@ -417,11 +432,11 @@ pub fn sieve_generate_safe_primes(
     rng: &mut impl rand_core::RngCore,
     bits: usize,
     amount: usize,
-) -> IBig {
+) -> Integer {
     use rug::integer::IsPrime;
 
     let amount = amount.min(crate::small_primes::SMALL_PRIMES.len());
-    let mut x = ibig::UBig::zero();
+    let mut x = Natural::ZERO;
 
     'trial: loop {
         // generate an odd number of length `bits - 2`
@@ -451,7 +466,7 @@ pub fn sieve_generate_safe_primes(
 */
 
 /// Samples `x` in Z*_n
-pub fn sample_in_mult_group(rng: &mut impl rand_core::RngCore, n: &IBig) -> IBig {
+pub fn sample_in_mult_group(rng: &mut impl rand_core::RngCore, n: &Integer) -> Integer {
     let mut x;
     loop {
         x = random_below(n.clone(), rng);
@@ -462,14 +477,14 @@ pub fn sample_in_mult_group(rng: &mut impl rand_core::RngCore, n: &IBig) -> IBig
 }
 
 pub fn a_dk() -> DecryptionKey {
-    let p = IBig::from_str_radix(crate::two_primes::P, 16).unwrap();
-    let q = IBig::from_str_radix(crate::two_primes::Q, 16).unwrap();
+    let p = Integer::from_string_base(16, crate::two_primes::P).unwrap();
+    let q = Integer::from_string_base(16, crate::two_primes::Q).unwrap();
     DecryptionKey::from_primes(p, q).unwrap()
 }
 
 #[cfg(test)]
 mod test {
-    use ibig::IBig;
+    use malachite::{integer::Integer, num::{basic::traits::One as _, conversion::traits::FromStringBase as _}};
 
     use super::{random_below, DecryptionKey};
 
@@ -482,7 +497,7 @@ mod test {
         for _ in 0..20 {
             // Generate plaintext in [-N/2; N/2)
             let plaintext = super::random_below(ek.n.clone(), &mut rng);
-            let plaintext = plaintext - (&ek.n / 2u8);
+            let plaintext = plaintext - (&ek.n / Integer::from(2u8));
             println!("Plaintext: {plaintext}");
 
             // Encrypt and decrypt
@@ -500,13 +515,13 @@ mod test {
 
         // Check corner cases
 
-        let lower_bound = -&ek.n / 2u8;
-        let upper_bound = &ek.n / 2u8;
+        let lower_bound = -&ek.n / Integer::from(2u8);
+        let upper_bound = &ek.n / Integer::from(2u8);
 
         let corner_cases = [
             lower_bound.clone(),
-            lower_bound.clone() + 1,
-            upper_bound.clone() - 1,
+            lower_bound.clone() + Integer::ONE,
+            upper_bound.clone() - Integer::ONE,
             upper_bound.clone(),
         ];
         for (i, plaintext) in corner_cases.into_iter().enumerate() {
@@ -529,8 +544,8 @@ mod test {
         for _ in 0..10 {
             let a = random_below(ek.n.clone(), &mut rng);
             let b = random_below(ek.n.clone(), &mut rng);
-            let a = a - (&ek.n / 2u8);
-            let b = b - (&ek.n / 2u8);
+            let a = a - (&ek.n / Integer::from(2u8));
+            let b = b - (&ek.n / Integer::from(2u8));
             println!("a: {a}");
             println!("b: {b}");
 
@@ -570,20 +585,20 @@ mod test {
     }
 
     fn random_key_for_tests(_rng: &mut impl rand_core::RngCore) -> DecryptionKey {
-        let p = IBig::from_str_radix(crate::two_primes::P, 16).unwrap();
-        let q = IBig::from_str_radix(crate::two_primes::Q, 16).unwrap();
+        let p = Integer::from_string_base(16, crate::two_primes::P).unwrap();
+        let q = Integer::from_string_base(16, crate::two_primes::Q).unwrap();
         DecryptionKey::from_primes(p, q).unwrap()
     }
 
     /// Takes `x mod n` and maps result to `{-N/2, .., N/2}`
-    fn signed_modulo(x: &IBig, n: &IBig) -> IBig {
+    fn signed_modulo(x: &Integer, n: &Integer) -> Integer {
         let x = super::modulo(x, n);
         unsigned_mod_to_signed(x, n)
     }
 
     /// Maps `{0, .., N-1}` to `{-N/2, .., N/2}`
-    fn unsigned_mod_to_signed(x: IBig, n: &IBig) -> IBig {
-        if 2u8 * &x >= *n {
+    fn unsigned_mod_to_signed(x: Integer, n: &Integer) -> Integer {
+        if Integer::from(2u8) * &x >= *n {
             x - n
         } else {
             x
@@ -593,10 +608,10 @@ mod test {
     #[test]
     fn pow_mod() {
         let mut rng = rand_dev::DevRng::new();
-        let m: IBig = super::random_bits(512, &mut rng).into();
+        let m: Integer = super::random_bits(512, &mut rng).into();
         let x = super::random_below(m.clone(), &mut rng);
         let e = super::random_below(m.clone(), &mut rng);
-        let r = super::pow_mod(&x, &e, m.clone());
+        let r = super::pow_mod(x.clone(), e.clone(), m.clone()).unwrap();
 
         let m = to_rug(&m);
         let x = to_rug(&x);
@@ -608,10 +623,10 @@ mod test {
     #[test]
     fn invert() {
         let mut rng = rand_dev::DevRng::new();
-        let m: IBig = super::random_bits(512, &mut rng).into();
+        let m: Integer = super::random_bits(512, &mut rng).into();
         let (x, r) = loop {
             let x = super::random_below(m.clone(), &mut rng);
-            if let Some(r) = super::invert(&x, m.clone()) {
+            if let Some(r) = super::invert(x.clone(), m.clone()) {
                 break (x, r);
             }
         };
@@ -626,8 +641,8 @@ mod test {
     fn encrypt_decrypt_compare() {
         let mut rng = rand_dev::DevRng::new();
         let dk = {
-            let p = IBig::from_str_radix(crate::two_primes::P, 16).unwrap();
-            let q = IBig::from_str_radix(crate::two_primes::Q, 16).unwrap();
+            let p = Integer::from_string_base(16, crate::two_primes::P).unwrap();
+            let q = Integer::from_string_base(16, crate::two_primes::Q).unwrap();
             DecryptionKey::from_primes(p, q).unwrap()
         };
         let dk_ = {
@@ -639,7 +654,7 @@ mod test {
         let ek_ = &dk_.ek;
 
         let plaintext = super::random_below(ek.n.clone(), &mut rng);
-        let plaintext = plaintext - (&ek.n / 2u8);
+        let plaintext = plaintext - (&ek.n / Integer::from(2u8));
         let plaintext_ = to_rug(&plaintext);
         let nonce = super::sample_in_mult_group(&mut rng, &ek.n);
         let nonce_ = to_rug(&nonce);
@@ -657,7 +672,7 @@ mod test {
         assert_eq!(to_rug(&decrypted), decrypted_);
     }
 
-    fn to_rug(x: &IBig) -> rug::Integer {
+    fn to_rug(x: &Integer) -> rug::Integer {
         let x_dec = x.to_string();
         rug::Integer::from_str_radix(&x_dec, 10).unwrap()
     }

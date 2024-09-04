@@ -1,4 +1,4 @@
-use every_bignum::{p_dashu, p_ibig, p_rug};
+use every_bignum::{p_dashu, p_ibig, p_rug, p_malachite};
 
 fn encrypt(c: &mut criterion::Criterion) {
     let base_rng = rand_dev::DevRng::new();
@@ -29,6 +29,7 @@ fn encrypt(c: &mut criterion::Criterion) {
     make!("rug", p_rug);
     make!("ibig", p_ibig);
     make!("dashu", p_dashu);
+    make!("malachite", p_malachite);
 }
 
 fn encrypt_with_factorization(c: &mut criterion::Criterion) {
@@ -62,6 +63,7 @@ fn encrypt_with_factorization(c: &mut criterion::Criterion) {
     make!("rug", p_rug);
     make!("ibig", p_ibig);
     make!("dashu", p_dashu);
+    make!("malachite", p_malachite);
 }
 
 fn decrypt(c: &mut criterion::Criterion) {
@@ -93,6 +95,7 @@ fn decrypt(c: &mut criterion::Criterion) {
     make!("rug", p_rug);
     make!("ibig", p_ibig);
     make!("dashu", p_dashu);
+    make!("malachite", p_malachite);
 }
 
 fn omul(c: &mut criterion::Criterion) {
@@ -125,6 +128,7 @@ fn omul(c: &mut criterion::Criterion) {
     make!("rug", p_rug);
     make!("ibig", p_ibig);
     make!("dashu", p_dashu);
+    make!("malachite", p_malachite);
 }
 
 fn omul_with_factorization(c: &mut criterion::Criterion) {
@@ -157,6 +161,7 @@ fn omul_with_factorization(c: &mut criterion::Criterion) {
     make!("rug", p_rug);
     make!("ibig", p_ibig);
     make!("dashu", p_dashu);
+    make!("malachite", p_malachite);
 }
 
 fn safe_prime(c: &mut criterion::Criterion) {
