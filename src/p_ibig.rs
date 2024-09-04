@@ -381,14 +381,11 @@ fn lcm(a: &IBig, b: &IBig) -> IBig {
 
 /// Result is always positive
 fn modulo(x: &IBig, m: &IBig) -> IBig {
-    x % m
-    /*
     if x < &IBig::zero() {
         m + x % m
     } else {
         x % m
     }
-    */
 }
 
 pub fn random_bits(bits: usize, rng: &mut impl rand_core::RngCore) -> ibig::UBig {

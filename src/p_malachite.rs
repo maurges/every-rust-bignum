@@ -395,11 +395,7 @@ fn lcm(a: &Integer, b: &Integer) -> Integer {
 
 /// Result is always positive
 fn modulo(x: &Integer, m: &Integer) -> Integer {
-    if x < &Integer::ZERO {
-        m + x % m
-    } else {
-        x % m
-    }
+    malachite::num::arithmetic::traits::Mod::mod_op(x, m)
 }
 
 pub fn random_bits(bits: usize, rng: &mut impl rand_core::RngCore) -> Natural {
