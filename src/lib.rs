@@ -2,6 +2,9 @@ pub mod p_dashu;
 pub mod p_ibig;
 pub mod p_rug;
 pub mod p_malachite;
+pub mod p_bigint;
+pub mod p_bigint_dig;
+
 mod small_primes;
 pub mod two_primes;
 
