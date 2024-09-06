@@ -185,6 +185,11 @@ fn safe_prime(c: &mut criterion::Criterion) {
     group.bench_function("rug", |b| {
         b.iter(|| p_rug::generate_safe_prime(&mut rng, bits))
     });
+
+    let mut rng = base_rng.clone();
+    group.bench_function("num-bigint-dig", |b| {
+        b.iter(|| p_bigint_dig::generate_safe_prime(&mut rng, bits as usize))
+    });
 }
 
 criterion::criterion_group!(
