@@ -4,6 +4,7 @@ pub mod p_rug;
 pub mod p_malachite;
 pub mod p_bigint;
 pub mod p_bigint_dig;
+pub mod p_unknown;
 
 mod small_primes;
 pub mod two_primes;

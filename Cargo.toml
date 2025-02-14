@@ -17,6 +17,7 @@ malachite = { version = "0.4.15", features = ["random"] }
 num-bigint = { version = "0.4.6", features = ["rand"] }
 num-bigint-dig = { version = "0.8.4", features = ["rand", "prime"] }
 rug = "1.25.0"
+unknown_order = { version = "0.10.1", default-features = false, features = ["openssl"] }
 
 num-traits = { version = "0.2" } # for ibig and num-bigint
 num-integer = { version = "0.1" } # for num-bigint
